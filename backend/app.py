@@ -1,5 +1,6 @@
 from quart import Quart, request
-from config import Config, init_db, auth_bp
+from config import Config
+from auth import init_db, auth_bp
 
 app = Quart(__name__)
 app.config.from_object(Config)
