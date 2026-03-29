@@ -38,7 +38,7 @@ class FallDetector:
     # 类别名称映射
     CLASS_NAMES = {0: 'normal', 1: 'fallen'}
 
-    # 人脸模糊配置
+    # 人脸模糊配置（使用 MediaPipe 替代 Haar Cascade）
     ENABLE_FACE_BLUR = True
     FACE_BLUR_STRENGTH = 51
     FACE_BLUR_EXPAND_RATIO = 0.5
@@ -67,10 +67,19 @@ class FallDetector:
         self.input_name = self.session.get_inputs()[0].name
         self.img_size = self.session.get_inputs()[0].shape[2]
 
-        # Haar Cascade 人脸检测器
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
+        # MediaPipe 人脸检测器
+       try:
+           import mediapipe as mp
+           self.mp_face_detection = mp.solutions.face_detection
+           self.mp_drawing = mp.solutions.drawing_utils
+           self.face_detection = self
+       .mp_face_detection.FaceDetection(
+               model_selection=0, min_detection_confidence=0.5
+       )
+       except Exception as e:
+           print(f"警告：无法加载 MediaPipe 人脸检测: {e}")
+           self.face_detection = None
+                     
 
         # 会话管理（追踪）
         self.session_manager = SessionManager(tracker_fps=tracker_fps)
@@ -228,26 +237,37 @@ class FallDetector:
         return FrameResult(detected=True, persons=persons)
 
     def _apply_face_blur(self, frame: np.ndarray) -> np.ndarray:
-        """使用 Haar Cascade 检测人脸并模糊"""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = self.face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(20, 20))
+       """使用 MediaPipe 检测人脸并模糊"""
+       if self.face_detection is None:
+           return frame
 
-        h, w = frame.shape[:2]
+       h, w = frame.shape[:2]
 
-        for (x, y, fw, fh) in faces:
-            # 扩大模糊区域
-            expand = self.FACE_BLUR_EXPAND_RATIO
-            cx, cy = x + fw // 2, y + fh // 2
-            new_w = int(fw * (1 + expand))
-            new_h = int(fh * (1 + expand))
-            x1 = max(0, cx - new_w // 2)
-            y1 = max(0, cy - new_h // 2)
-            x2 = min(w, cx + new_w // 2)
-            y2 = min(h, cy + new_h // 2)
+       # MediaPipe 需要 RGB 格式
+       frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+       results = self.face_detection.process(frame_rgb)
 
-            if x2 - x1 > 5 and y2 - y1 > 5:
-                region = frame[y1:y2, x1:x2]
-                blurred = cv2.GaussianBlur(region, (self.FACE_BLUR_STRENGTH, self.FACE_BLUR_STRENGTH), 0)
-                frame[y1:y2, x1:x2] = blurred
+       if results.detections:
+           for detection in results.detections:
+               # 获取边界框坐标
+               bbox = detection.location_data.relative_bounding_box
+               x, y = int(bbox.xmin * w), int(bbox.ymin * h)
+               fw, fh = int(bbox.width * w), int(bbox.height * h)
 
-        return frame
+               # 扩大模糊区域
+               expand = self.FACE_BLUR_EXPAND_RATIO
+               cx, cy = x + fw // 2, y + fh // 2
+               new_w = int(fw * (1 + expand))
+               new_h = int(fh * (1 + expand))
+               x1 = max(0, cx - new_w // 2)
+               y1 = max(0, cy - new_h // 2)
+               x2 = min(w, cx + new_w // 2)
+               y2 = min(h, cy + new_h // 2)
+
+               if x2 - x1 > 5 and y2 - y1 > 5:
+                   region = frame[y1:y2, x1:x2]
+                   blurred = cv2.GaussianBlur(region, (self
+   .FACE_BLUR_STRENGTH, self.FACE_BLUR_STRENGTH), 0)
+                   frame[y1:y2, x1:x2] = blurred
+
+       return frame
