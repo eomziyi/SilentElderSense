@@ -72,8 +72,7 @@ class FallDetector:
            import mediapipe as mp
            self.mp_face_detection = mp.solutions.face_detection
            self.mp_drawing = mp.solutions.drawing_utils
-           self.face_detection = self
-       .mp_face_detection.FaceDetection(
+           self.face_detection = self.mp_face_detection.FaceDetection(
                model_selection=0, min_detection_confidence=0.5
        )
        except Exception as e:
@@ -266,8 +265,7 @@ class FallDetector:
 
                if x2 - x1 > 5 and y2 - y1 > 5:
                    region = frame[y1:y2, x1:x2]
-                   blurred = cv2.GaussianBlur(region, (self
-   .FACE_BLUR_STRENGTH, self.FACE_BLUR_STRENGTH), 0)
+                   blurred = cv2.GaussianBlur(region, (self.FACE_BLUR_STRENGTH, self.FACE_BLUR_STRENGTH), 0)
                    frame[y1:y2, x1:x2] = blurred
 
        return frame
